@@ -1,3 +1,8 @@
 install.packages("fable")
 install.packages("fabletools")
 install.packages("tsibble")
+install.packages("hts")
+install.packages("Matrix")
+install.packages("reshape2")
+install.packages("tidyverse") 
+install.packages("readr")
