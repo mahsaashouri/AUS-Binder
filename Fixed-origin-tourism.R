@@ -44,7 +44,7 @@ for(i in seq(NCOL(ally)))
 end_time <- Sys.time()
 end_time - start_time
 
-fc.OLS <- as.data.frame(fc[,,"OLS"])
+fc.OLS.base <- as.data.frame(fc[,,"OLS"])
 fc.OLS.lwr <- as.data.frame(fc[,,"OLS.lwr"])
 fc.OLS.upr <- as.data.frame(fc[,,"OLS.upr"])
 fc.OLS.se <- as.data.frame(fc[,,"OLS.se"])
@@ -69,8 +69,8 @@ lambda <- as(diag(rowSums(smatrix)), 'dgCMatrix')
 rec.adj.lambda <- as.matrix(smatrix%*%solve(t(smatrix)%*%solve(lambda)%*%smatrix)%*%t(smatrix)%*%solve(lambda))
 ## computing reconciled forecasts
 fc.rec <- matrix(NA, nrow = 24, ncol = ncol(ally))
-for(i in 1:nrow(fc.OLS)){
-  f.1 <- matrix(as.numeric(fc.OLS[i,]), ncol = 1, nrow = ncol(fc.OLS))
+for(i in 1:nrow(fc.OLS.base)){
+  f.1 <- matrix(as.numeric(fc.OLS.base[i,]), ncol = 1, nrow = ncol(fc.OLS.base))
   fc.rec [i,] <- rec.adj.lambda %*% f.1
 }
 colnames(fc.rec) <- colnames(ally)
@@ -124,7 +124,7 @@ for(i in 1:h){
 
 ## saving the forecasts, errors and prediction interval results - based and reconciled forecasts
 
-OLS.unrec = reshape2::melt(fc.OLS)
+OLS.unrec = reshape2::melt(fc.OLS.base)
 OLS.rec = reshape2::melt(fc.rec) 
 OLS.var.rec = reshape2::melt(result.var) 
 OLS.lower.unrec = reshape2::melt(fc.OLS.lwr) 
@@ -159,11 +159,11 @@ library(tidyverse)
 library(tsibble)
 library(readr)
 
-aus <- read.csv('TourismData_v3.csv', header = TRUE)[,-c(1,2)]
-aus <-  tibble(aus)
-aus$Date <-  rep(yearmonth("1998 Jan") + 0:227)
+aus.ets.arima <- read.csv('TourismData_v3.csv', header = TRUE)[,-c(1,2)]
+aus.ets.arima <-  tibble(aus.ets.arima)
+aus.ets.arima$Date <-  rep(yearmonth("1998 Jan") + 0:227)
 
-aus <- aus %>%
+aus.ets.arima <- aus.ets.arima %>%
   pivot_longer(-Date, names_to = "group", values_to = "value") %>%
   mutate(
     State = stringr::str_sub(group, 1, 1),
@@ -175,7 +175,7 @@ aus <- aus %>%
   as_tsibble(index = Date, key=c(State, Zone, Region, Purpose))
 
 
-ausgts <- aus %>%
+ausgts <- aus.ets.arima %>%
   aggregate_key(Purpose * (State/ Zone/ Region), value = sum(value)) 
 
 new_data <- ausgts %>%
@@ -191,15 +191,15 @@ fc.ets <- ausgts %>%
 end_time <- Sys.time()
 end_time - start_time
 
-fc.ets <- fc.ets %>%
+fc.ets.rec <- fc.ets %>%
   reconcile(ets_adjusted = min_trace(ets, method="wls_struct"))%>%
   forecast(h = "2 years") 
 
-fc.ets.error <- fc.ets %>%
+fc.ets.error <- fc.ets.rec %>%
   left_join(new_data) %>%
   mutate(error = actual - .mean)
 
-fc.ets <- fc.ets.error %>%
+fc.ets.rec <- fc.ets.error %>%
   hilo(level=95) %>% 
   unpack_hilo("95%")
 
@@ -212,22 +212,22 @@ fc.arima <- ausgts %>%
 end_time <- Sys.time()
 end_time - start_time
 
-fc.arima <- fc.arima %>%
+fc.arima.rec <- fc.arima %>%
   reconcile(arima_adjusted = min_trace(arima, method="wls_struct"))%>%
   forecast(h = "2 years") 
 
-fc.arima.error <- fc.arima %>%
+fc.arima.error <- fc.arima.rec %>%
   left_join(new_data) %>%
   mutate(error = actual - .mean)
 
-fc.arima <- fc.arima.error %>%
+fc.arima.rec <- fc.arima.error %>%
   hilo(level=95) %>% 
   unpack_hilo("95%")
 
 
 ## saving  ets and arima results
 
-fc.ets.arima <- bind_rows (fc.arima, fc.ets)%>% 
+fc.ets.arima <- bind_rows (fc.arima.rec, fc.ets.rec)%>% 
   distinct(across(-value))
 
 
