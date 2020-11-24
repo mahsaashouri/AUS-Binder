@@ -57,7 +57,8 @@ dimnames(fc) <- list(
   Method = c("OLS", "OLS.lwr", "OLS.upr", "OLS.se", "OLS.residual.scale")
 )
 
-# Create forecasts for all methods
+## computation time
+start_time <- Sys.time()
 for(i in seq(NCOL(ally)))
 {
   fit.OLS <- olsfc(ally[,i], h = h, maxlag = 7, nolag = c(1,7))
@@ -67,6 +68,8 @@ for(i in seq(NCOL(ally)))
   fc[, i,"OLS.se"] <- fit.OLS[[4]]
   fc[, i,"OLS.residual.scale"] <- fit.OLS[[5]]
 }
+end_time <- Sys.time()
+end_time - start_time
 
 fc.OLS <- as.data.frame(fc[,,"OLS"])
 fc.OLS.lwr <- as.data.frame(fc[,,"OLS.lwr"])
@@ -229,9 +232,14 @@ new_data <- wikigts %>%
   dplyr::filter(date > ymd("2017-06-01")) %>%
   rename(actual = views)
 #ETS
+start_time <- Sys.time()
 fc.ets <- wikigts %>%
   filter(date <= ymd("2017-06-01")) %>%
-  model(ets = ETS(views ))%>%
+  model(ets = ETS(views ))
+end_time <- Sys.time()
+end_time - start_time
+
+fc.ets <- fc.ets %>%
   reconcile(ets_adjusted = min_trace(ets, method="wls_struct"))%>%
   forecast(h = "28 days") 
 
@@ -244,9 +252,14 @@ fc.ets <- fc.ets.error %>%
   unpack_hilo("95%")
 
 #ARIMA
+start_time <- Sys.time()
 fc.arima <- wikigts %>%
   filter(date <= ymd("2017-06-01")) %>%
-  model(arima = ARIMA(views ))%>%
+  model(arima = ARIMA(views ))
+end_time <- Sys.time()
+end_time - start_time
+
+fc.arima <- fc.arima %>%
   reconcile(arima_adjusted = min_trace(arima, method="wls_struct"))%>%
   forecast(h = "28 days") 
 
@@ -260,9 +273,9 @@ fc.arima <- fc.arima.error %>%
 
 fc.ets.arima <- bind_rows (fc.arima, fc.ets) %>% 
   distinct(across(-views))
-write.csv(fc.ets.arima, 'fc.fix.wiki.ets.arima.csv')
 
-##### Ploting the results
+
+##### Plotting the results
 
 fc.OLS <- bind_rows(fc.OLS %>%
                            filter(Series == 'Total') %>%
@@ -398,8 +411,7 @@ fc.ets.arima <- bind_rows( fc.ets.arima %>%
                                !is_aggregated(Language),
                                !is_aggregated(Purpose),
                                !is_aggregated(Article)
-                             ) %>% mutate (Level = 'Bottom level')
-                           )
+                             ) %>% mutate (Level = 'Bottom level'))
 
 fc.ets.arima <- bind_rows(fc.ets.arima %>% 
                             filter(.model %in% c('arima', 'ets')) %>%
@@ -602,19 +614,19 @@ forecast.wiki.data %>%
   filter(Series == "Total") %>%
   ggplot(aes(x = index, y = Actual, colour = "Actual", size = 'Actual')) +
   geom_ribbon(aes(x = index, ymax = ARIMA.upper.rec, ymin = ARIMA.lower.rec), fill = "lightskyblue", colour = "lightskyblue", alpha = .2, size = 0.5) +
-  geom_ribbon(aes(x = index, ymax = ETS.upper.rec, ymin = ETS.lower.rec), fill = "lightgreen", colour = "lightgreen", alpha = .2, size = 0.5) +
+  #geom_ribbon(aes(x = index, ymax = ETS.upper.rec, ymin = ETS.lower.rec), fill = "lightgreen", colour = "lightgreen", alpha = .2, size = 0.5) +
   geom_ribbon(aes(x = index, ymax = OLS.upper.rec, ymin = OLS.lower.rec), fill = "pink", colour = "pink", alpha = .2, size = 0.5)  +
   geom_line(aes(y = ARIMA.rec, colour = "ARIMA.rec", size = 'ARIMA.rec')) +
-  geom_line(aes(y = ETS.rec, colour = "ETS.rec", size = 'ETS.rec')) +
+  #geom_line(aes(y = ETS.rec, colour = "ETS.rec", size = 'ETS.rec')) +
   geom_line(aes(y = OLS.rec, colour = "OLS.rec", size = 'OLS.rec')) +
   geom_line() +
   xlab("Horizon") +
   ylab("Count") +
   ggtitle("Fixed origin multi-step forecasts") +
   scale_colour_manual("Method",
-                      breaks = c("Actual", "ARIMA.rec",  "ETS.rec", "OLS.rec"),
-                      values = c("black", "blue", "green",  "red"))+
-  scale_size_manual(breaks = c("Actual", "ARIMA.rec",  "ETS.rec", "OLS.rec"),
+                      breaks = c("Actual", "ARIMA.rec",   "OLS.rec"),
+                      values = c("black", "blue",  "red"))+
+  scale_size_manual(breaks = c("Actual", "ARIMA.rec",   "OLS.rec"),
                     values = c( 0.8, 0.5,  0.5,  0.5), guide = "none") +
   theme_bw()
 ### desktopusenPho - figure 28
@@ -622,19 +634,19 @@ forecast.wiki.data %>%
   filter(Series == "desktopusenPho", Actual %in% m) %>%
   ggplot(aes(x = index, y = Actual, colour = "Actual", size = 'Actual')) +
   geom_ribbon(aes(x = index, ymax = ARIMA.upper.rec, ymin = ARIMA.lower.rec), fill = "lightskyblue", colour = "lightskyblue", alpha = .2, size = 0.5) +
-  geom_ribbon(aes(x = index, ymax = ETS.upper.rec, ymin = ETS.lower.rec), fill = "lightgreen", colour = "lightgreen", alpha = .2, size = 0.5) +
+  #geom_ribbon(aes(x = index, ymax = ETS.upper.rec, ymin = ETS.lower.rec), fill = "lightgreen", colour = "lightgreen", alpha = .2, size = 0.5) +
   geom_ribbon(aes(x = index, ymax = OLS.upper.rec, ymin = OLS.lower.rec), fill = "pink", colour = "pink", alpha = .2, size = 0.5)  +
   geom_line(aes(y = ARIMA.rec, colour = "ARIMA.rec", size = 'ARIMA.rec')) +
-  geom_line(aes(y = ETS.rec, colour = "ETS.rec", size = 'ETS.rec')) +
+  #geom_line(aes(y = ETS.rec, colour = "ETS.rec", size = 'ETS.rec')) +
   geom_line(aes(y = OLS.rec, colour = "OLS.rec", size = 'OLS.rec')) +
   geom_line() +
   xlab("Horizon") +
   ylab("Count") +
   ggtitle("Fixed origin multi-step forecasts") +
   scale_colour_manual("Method",
-                      breaks = c("Actual", "ARIMA.rec",  "ETS.rec", "OLS.rec"),
-                      values = c("black", "blue", "green",  "red"))+
-  scale_size_manual(breaks = c("Actual", "ARIMA.rec",  "ETS.rec", "OLS.rec"),
+                      breaks = c("Actual", "ARIMA.rec",  "OLS.rec"),
+                      values = c("black", "blue",  "red"))+
+  scale_size_manual(breaks = c("Actual", "ARIMA.rec",   "OLS.rec"),
                     values = c( 0.8, 0.5,  0.5,  0.5), guide = "none") +
   theme_bw()
 
