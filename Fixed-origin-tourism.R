@@ -230,7 +230,7 @@ fc.arima.rec <- fc.arima.error %>%
 fc.ets.arima <- bind_rows (fc.arima.rec, fc.ets.rec)%>% 
   distinct(across(-value))
 
-##### Ploting the results
+##### Plotting the results
 
 fc.OLS <- bind_rows(fc.OLS%>%
                       filter(Series == 'Total') %>%
@@ -337,7 +337,7 @@ error.tourism <- bind_rows(
   mutate( facet = factor(Level,
                          levels = c("Total", "State", "Zone", "Region", "Purpose", "State x Purpose", "Zone x Purpose", "Region x Purpose")))
 
-### Computing RMSE - Table 3
+### Computing RMSE - table 3
 rmse <- error.tourism %>%
   group_by(Rec, Method, facet) %>%
   summarise(
@@ -440,7 +440,7 @@ error.tourism %>%
 
 ## Sample series plot with forecasts
 
-### Total - Figure 7
+### Total - figure 7
 ylim <- forecast.tourism %>%
   filter(Series == "Total") %>%
   pull(Count) %>%
@@ -466,7 +466,7 @@ forecast.tourism %>%
     )
   ) +
   theme_bw() 
-### AAAVis - Figure 8
+### AAAVis - figure 8
 ylim <- forecast.tourism %>%
   filter(Series == "AAAVis") %>%
   pull(Count) %>%
@@ -494,7 +494,7 @@ forecast.tourism %>%
   theme_bw() 
 
 ## Sample series prediction interval plots
-### Total - Figure 9
+### Total - figure 9
 forecast.tourism.data %>%
   filter(Series == "Total") %>%
   ggplot(aes(x = date, y = Actual, colour = "Actual", size = 'Actual')) +
@@ -514,7 +514,7 @@ forecast.tourism.data %>%
   scale_size_manual(breaks = c("Actual", "ARIMA.rec",  "ETS.rec", "OLS.rec"),
                     values = c( 0.8, 0.5,  0.5,  0.5), guide = "none") +
   theme_bw()
-### AAAVis - Figure 10
+### AAAVis - figure 10
 forecast.tourism.data %>%
   filter(Series == "AAAVis") %>%
   ggplot(aes(x = date, y = Actual, colour = "Actual", size = 'Actual')) +
