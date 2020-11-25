@@ -166,19 +166,19 @@ aus.ets.arima <- aus.ets.arima %>%
   as_tsibble(index = Date, key=c(State, Zone, Region, Purpose))
 
 
-ausgts <- aus.ets.arima %>%
+ausgts.ets.arima <- aus.ets.arima %>%
   aggregate_key(Purpose * (State/ Zone/ Region), value = sum(value)) 
 
-new_data <- ausgts %>%
+new_data <- ausgts.ets.arima %>%
   dplyr::filter(Date > yearmonth ("2014 Dec")) %>%
   rename(actual = value)
 
 ## rolling window
-gts.rolling <- ausgts %>%
+gts.rolling <- ausgts.ets.arima %>%
   filter(Date < yearmonth ("2016 Dec")) %>%
   stretch_tsibble(.init = 204 , .step = 1)
 
-new_data <- ausgts %>%
+new_data <- ausgts.ets.arima %>%
   dplyr::filter(Date > yearmonth ("2014 Dec")) %>%
   rename(actual = value)%>% 
   arrange(`Date`) %>%
@@ -249,30 +249,27 @@ for(i in m){
 
 ## saving  ets and arima results
 
-fc.ets.arima <- bind_rows (fc.arima.rec, fc.ets.rec)%>% 
-  distinct(across(-value))
+fc.ets.arima <- bind_rows (fc.arima.rec, fc.ets.rec)
 
+##### Plotting the results
 
-
-##### Ploting the results
-
-fc.OLS <- bind_rows(fc.OLS%>%
+fc.OLS <- bind_rows(fc.OLS %>%
                       filter(Series == 'Total') %>%
                       mutate (Level = 'Total'),
-                    fc.OLS%>% filter(grepl('State/', Series)) %>%
+                    fc.OLS %>% filter(grepl('State/', Series)) %>%
                       mutate (Level = 'State'), 
-                    fc.OLS%>% filter(grepl('Zone/', Series)) %>%
+                    fc.OLS %>% filter(grepl('Zone/', Series)) %>%
                       mutate (Level = 'Zone'), 
-                    fc.OLS%>% filter(grepl('Region/', Series)) %>%
+                    fc.OLS %>% filter(grepl('Region/', Series)) %>%
                       mutate (Level = 'Region'), 
-                    fc.OLS%>% filter(Series %in% c('Purpose/Bus','Purpose/Hol', 
+                    fc.OLS %>% filter(Series %in% c('Purpose/Bus','Purpose/Hol', 
                                                    'Purpose/Oth','Purpose/Vis')) %>%
                       mutate (Level = 'Purpose'), 
-                    fc.OLS%>% filter(grepl('State x Purpose/', Series)) %>%
+                    fc.OLS %>% filter(grepl('State x Purpose/', Series)) %>%
                       mutate (Level = 'State x Purpose'), 
-                    fc.OLS%>% filter(grepl('Zone x Purpose/', Series)) %>%
+                    fc.OLS %>% filter(grepl('Zone x Purpose/', Series)) %>%
                       mutate (Level = 'Zone x Purpose'), 
-                    fc.OLS%>% filter( !grepl('State', Series) & !grepl('Zone', Series) & 
+                    fc.OLS %>% filter( !grepl('State', Series) & !grepl('Zone', Series) & 
                                         !grepl('Region', Series) & !grepl('Purpose', Series) & 
                                         !grepl('Total', Series)) %>%
                       mutate (Level = 'Region x Purpose'))
@@ -361,7 +358,7 @@ error.tourism <- bind_rows(
   mutate( facet = factor(Level,
                          levels = c("Total", "State", "Zone", "Region", "Purpose", "State x Purpose", "Zone x Purpose", "Region x Purpose")))
 
-### Computing RMSE
+### Computing RMSE - table 3
 rmse <- error.tourism %>%
   group_by(Rec, Method, facet) %>%
   summarise(
@@ -432,7 +429,7 @@ boxplot.stat <- function(x) {
   return(stats)
 }
 
-
+###### Figure 5
 error.tourism %>%
   mutate(id = factor(paste(Method, Rec, sep = "."),
                      levels = c("ETS.rec", "ETS.unrec", "ARIMA.rec", "ARIMA.unrec", "OLS.rec", "OLS.unrec"),
@@ -464,7 +461,7 @@ error.tourism %>%
 
 ## Sample series plot with forecasts
 
-### Total
+### Total - figure 7
 ylim <- forecast.tourism %>%
   filter(Series == "Total") %>%
   pull(Count) %>%
@@ -490,7 +487,7 @@ forecast.tourism %>%
     )
   ) +
   theme_bw() 
-### AAAVis
+### AAAVis - figure 8
 ylim <- forecast.tourism %>%
   filter(Series == "AAAVis") %>%
   pull(Count) %>%
@@ -518,7 +515,7 @@ forecast.tourism %>%
   theme_bw() 
 
 ## Sample series prediction interval plots
-### Total
+### Total - figure 9
 forecast.tourism.data %>%
   filter(Series == "Total") %>%
   ggplot(aes(x = date, y = Actual, colour = "Actual", size = 'Actual')) +
@@ -538,7 +535,7 @@ forecast.tourism.data %>%
   scale_size_manual(breaks = c("Actual", "ARIMA.rec",  "ETS.rec", "OLS.rec"),
                     values = c( 0.8, 0.5,  0.5,  0.5), guide = "none") +
   theme_bw()
-### AAAVis
+### AAAVis - figure 10
 forecast.tourism.data %>%
   filter(Series == "AAAVis") %>%
   ggplot(aes(x = date, y = Actual, colour = "Actual", size = 'Actual')) +
@@ -558,3 +555,308 @@ forecast.tourism.data %>%
   scale_size_manual(breaks = c("Actual", "ARIMA.rec",  "ETS.rec", "OLS.rec"),
                     values = c( 0.8, 0.5,  0.5,  0.5), guide = "none") +
   theme_bw()
+
+
+
+######################################
+#### different reconciliation results
+######################################
+
+
+####################################
+#### Reconciling forecasts - compute SP matrix based on the desired reconciliation type  - OLS
+###################################
+
+#mint_shrink - OLS
+error.unrec.OLS <- as.matrix(ally.test) - as.matrix(fc.OLS.base)
+n <- nrow(error.unrec.OLS)
+covm <- crossprod(stats::na.omit(error.unrec.OLS)) / n
+tar <- diag(apply(error.unrec.OLS, 2, compose(crossprod, stats::na.omit))/n)
+corm <- cov2cor(covm)
+xs <- scale(error.unrec.OLS, center = FALSE, scale = sqrt(diag(covm)))
+xs <- xs[stats::complete.cases(xs),]
+v <- (1/(n * (n - 1))) * (crossprod(xs^2) - 1/n * (crossprod(xs))^2)
+diag(v) <- 0
+corapn <- cov2cor(tar)
+d <- (corm - corapn)^2
+lambda <- sum(v)/sum(d)
+lambda <- max(min(lambda, 1), 0)
+W <- lambda * tar + (1 - lambda) * covm
+gmat <- GmatrixG(ausgts$groups)
+smatrix <- as.matrix(SmatrixM(gmat))
+R <- t(smatrix)%*%solve(W)
+P <- Matrix::solve(R%*%smatrix)%*%R
+SP <- as.matrix(smatrix%*%P)
+
+
+## multiply the based forecasts by SP matrix
+
+fc.mint.shrink.OLS <- matrix(NA, nrow = 24, ncol = ncol(ally))
+
+for(i in 1:nrow(fc.OLS.base)){
+  f.1 <- matrix(as.numeric(fc.OLS.base[i,]), ncol = 1, nrow = ncol(fc.OLS.base))
+  fc.mint.shrink.OLS [i,] <- SP %*% f.1
+}
+colnames(fc.mint.shrink.OLS) <- colnames(ally)
+
+OLS.rec.mint.shrink <- reshape2::melt(fc.mint.shrink.OLS) %>%
+  mutate(actual = reshape2::melt(ally.test)$value, error = reshape2::melt(ally.test)$value - value , Rec = 'mint_shrink')
+
+## wls_var
+
+W <- diag(diag(covm))
+gmat <- GmatrixG(ausgts$groups)
+smatrix <- as.matrix(SmatrixM(gmat))
+R <- t(smatrix)%*%solve(W)
+P <- solve(R%*%smatrix)%*%R
+SP <- smatrix%*%P
+
+fc.wls.var.OLS <- matrix(NA, nrow = 24, ncol = ncol(ally))
+
+for(i in 1:nrow(fc.OLS.base)){
+  f.1 <- matrix(as.numeric(fc.OLS.base[i,]), ncol = 1, nrow = ncol(fc.OLS.base))
+  fc.wls.var.OLS [i,] <- SP %*% f.1
+}
+colnames(fc.wls.var.OLS) <- colnames(ally)
+
+OLS.rec.wls.var <- reshape2::melt(fc.wls.var.OLS) %>%
+  mutate(actual = reshape2::melt(ally.test)$value, error = reshape2::melt(ally.test)$value - value , Rec = 'wls_var')
+## saving results
+fc.OLS.mint.shrink.wls.var <- bind_rows(OLS.rec.mint.shrink, OLS.rec.wls.var)
+
+###############################
+### different reconciliation - ETS-ARIMA
+##############################
+
+### mint_shrink reconciliation
+fc.ets.mint.shrink <- fc.ets %>%
+  reconcile(ets_adjusted = min_trace(ets, method="mint_shrink"))%>%
+  forecast(h = "2 years") 
+
+fc.ets.mint.shrink.error <- fc.ets.mint.shrink %>%
+  left_join(new_data) %>%
+  mutate(error = actual - .mean)
+
+fc.ets.mint.shrink <- fc.ets.mint.shrink.error %>%
+  hilo(level=95) %>% 
+  unpack_hilo("95%")
+
+### wls_var reconciliation
+fc.ets.wls.var <- fc.ets %>%
+  reconcile(ets_adjusted = min_trace(ets, method="wls_var"))%>%
+  forecast(h = "2 years") 
+
+fc.ets.wls.var.error <- fc.ets.wls.var %>%
+  left_join(new_data) %>%
+  mutate(error = actual - .mean)
+
+fc.ets.wls.var <- fc.ets.wls.var.error %>%
+  hilo(level=95) %>% 
+  unpack_hilo("95%")
+
+#ARIMA
+
+### mint_shrink reconciliation
+fc.arima.mint.shrink <- fc.arima %>%
+  reconcile(arima_adjusted = min_trace(arima, method="mint_shrink"))%>%
+  forecast(h = "2 years") 
+
+fc.arima.mint.shrink.error <- fc.arima.mint.shrink %>%
+  left_join(new_data) %>%
+  mutate(error = actual - .mean)
+
+fc.arima.mint.shrink <- fc.arima.mint.shrink.error %>%
+  hilo(level=95) %>% 
+  unpack_hilo("95%")
+
+### wls_var reconciliation
+fc.arima.wls.var <- fc.arima %>%
+  reconcile(arima_adjusted = min_trace(arima, method="wls_var"))%>%
+  forecast(h = "2 years") 
+
+fc.arima.wls.var.error <- fc.arima.wls.var %>%
+  left_join(new_data) %>%
+  mutate(error = actual - .mean)
+
+fc.arima.wls.var <- fc.arima.wls.var.error %>%
+  hilo(level=95) %>% 
+  unpack_hilo("95%")
+## mint_shrink & wls_var results
+ets.arima.dif.rec <- bind_rows(bind_rows (fc.arima.mint.shrink, fc.ets.mint.shrink) %>% 
+                                 distinct(across(-value)) %>%
+                                 mutate(Rec = 'mint_shrink') %>%
+                                 filter(.model %in% c('ets_adjusted', 'arima_adjusted')), bind_rows (fc.arima.wls.var, fc.ets.wls.var) %>% 
+                                 distinct(across(-value)) %>%
+                                 mutate(Rec = 'wls_var') %>%
+                                 filter(.model %in% c('ets_adjusted', 'arima_adjusted')))
+
+
+ets.arima.dif.rec <- bind_rows( ets.arima.dif.rec %>%
+                                  filter(
+                                    is_aggregated(State),
+                                    is_aggregated(Zone),
+                                    is_aggregated(Region),
+                                    is_aggregated(Purpose)
+                                  ) %>% mutate (Level = 'Total'), 
+                                ets.arima.dif.rec %>%
+                                  filter(
+                                    !is_aggregated(State),
+                                    is_aggregated(Zone),
+                                    is_aggregated(Region),
+                                    is_aggregated(Purpose)
+                                  ) %>% mutate (Level = 'State'), 
+                                ets.arima.dif.rec %>%
+                                  filter(
+                                    !is_aggregated(State),
+                                    !is_aggregated(Zone),
+                                    is_aggregated(Region),
+                                    is_aggregated(Purpose)
+                                  ) %>% mutate (Level = 'Zone') ,
+                                ets.arima.dif.rec %>%
+                                  filter(
+                                    !is_aggregated(State),
+                                    !is_aggregated(Zone),
+                                    !is_aggregated(Region),
+                                    is_aggregated(Purpose)
+                                  ) %>% mutate (Level = 'Region') ,
+                                ets.arima.dif.rec %>%
+                                  filter(
+                                    is_aggregated(State),
+                                    is_aggregated(Zone),
+                                    is_aggregated(Region),
+                                    !is_aggregated(Purpose)
+                                  ) %>%  mutate (Level = 'Purpose') ,
+                                ets.arima.dif.rec %>%
+                                  filter(
+                                    !is_aggregated(State),
+                                    is_aggregated(Zone),
+                                    is_aggregated(Region),
+                                    !is_aggregated(Purpose)
+                                  ) %>% mutate (Level = 'State x Purpose') ,
+                                ets.arima.dif.rec %>%
+                                  filter(
+                                    !is_aggregated(State),
+                                    !is_aggregated(Zone),
+                                    is_aggregated(Region),
+                                    !is_aggregated(Purpose)
+                                  ) %>% mutate (Level = 'Zone x Purpose') ,
+                                ets.arima.dif.rec %>%
+                                  filter(
+                                    !is_aggregated(State),
+                                    !is_aggregated(Zone),
+                                    !is_aggregated(Region),
+                                    !is_aggregated(Purpose)
+                                  ) %>% mutate (Level = 'Region x Purpose') )
+
+
+ets.arima.dif.rec <- bind_rows(ets.arima.dif.rec %>% 
+                                 filter(.model %in% c('arima_adjusted')) %>%
+                                 mutate(Method = 'ARIMA'), 
+                               ets.arima.dif.rec %>% 
+                                 filter(.model %in% c('ets_adjusted')) %>%
+                                 mutate(Method = 'ETS'))
+
+
+fc.OLS.mint.shrink.wls.var <- bind_rows(fc.OLS.mint.shrink.wls.var %>%
+                                          filter(Var2 == 'Total') %>%
+                                          mutate (Level = 'Total'),
+                                        fc.OLS.mint.shrink.wls.var %>% filter(grepl('State/', Var2)) %>%
+                                          mutate (Level = 'State'), 
+                                        fc.OLS.mint.shrink.wls.var %>% filter(grepl('Zone/', Var2)) %>%
+                                          mutate (Level = 'Zone'), 
+                                        fc.OLS.mint.shrink.wls.var %>% filter(grepl('Region/', Var2)) %>%
+                                          mutate (Level = 'Region'), 
+                                        fc.OLS.mint.shrink.wls.var %>% filter(Var2 %in% c('Purpose/Bus','Purpose/Hol', 
+                                                                                          'Purpose/Oth','Purpose/Vis')) %>%
+                                          mutate (Level = 'Purpose'), 
+                                        fc.OLS.mint.shrink.wls.var %>% filter(grepl('State x Purpose/', Var2)) %>%
+                                          mutate (Level = 'State x Purpose'), 
+                                        fc.OLS.mint.shrink.wls.var %>% filter(grepl('Zone x Purpose/', Var2)) %>%
+                                          mutate (Level = 'Zone x Purpose'), 
+                                        fc.OLS.mint.shrink.wls.var %>% filter( !grepl('State', Var2) & !grepl('Zone', Var2) & 
+                                                                                 !grepl('Region', Var2) & !grepl('Purpose', Var2) & 
+                                                                                 !grepl('Total', Var2)) %>%
+                                          mutate (Level = 'Region x Purpose'))
+
+error.OLS.dif.rec <- dplyr::select ( fc.OLS.mint.shrink.wls.var, error , Level, Rec) %>% 
+  mutate(Method = 'OLS')
+
+error.tourism.struct <- error.tourism %>%
+  select(-Rec) %>%
+  mutate(Rec = 'wls_struct')
+
+error.dif.rec <- bind_rows(
+  dplyr::select ( ets.arima.dif.rec, error , Level, Rec, Method), error.OLS.dif.rec, error.tourism.struct) %>%
+  mutate( facet = factor(Level,
+                         levels = c("Total", "State", "Zone", "Region", "Purpose", "State x Purpose", "Zone x Purpose", "Region x Purpose")))
+############################## Table 16
+rmse.dif.rec <- error.dif.rec %>%
+  group_by(Rec, Method, facet) %>%
+  summarise(
+    rmse = sqrt(mean(error^2))
+  ) %>%
+  spread(value = rmse, key = Method) %>%
+  ungroup() %>%
+  select(Rec, facet, ETS, ARIMA, OLS) %>%
+  mutate(
+    facet = str_replace(facet, "level([0-9])", "facet \\1")
+  )
+########################## Figure 21
+
+p1 <- forecast.tourism.data %>%
+  filter(Series == "AAAVis") %>%
+  ggplot(aes(x = date, y = Actual, colour = "Actual", size = 'Actual')) +
+  geom_ribbon(aes(x = date, ymax = ARIMA.upper.unrec, ymin = ARIMA.lower.unrec), fill = "gray83", colour = "gray83", alpha = .2, size = 0.5) +
+  geom_ribbon(aes(x = date, ymax = ARIMA.upper.rec, ymin = ARIMA.lower.rec), fill = "lightblue", colour = "lightblue", alpha = .2, size = 0.5)  +
+  geom_line(aes(y = ETS.rec, colour = "ARIMA.unrec", size = 'ARIMA.unrec')) +
+  geom_line(aes(y = ARIMA.rec, colour = "ARIMA.rec", size = 'ARIMA.rec')) +
+  geom_line() +
+  xlab("Horizon") +
+  ylab("Count") +
+  ggtitle("Fixed origin multi-step forecasts") +
+  scale_colour_manual("Method",
+                      breaks = c("Actual", "ARIMA.unrec", "ARIMA.rec"),
+                      values = c("black", "gray",  "blue"))+
+  scale_size_manual(breaks = c("Actual", "ARIMA.unrec", 'ARIMA.rec'),
+                    values = c( 0.8, 0.5,  0.5), guide = "none") +
+  theme_bw()
+
+p2  <- forecast.tourism.data %>%
+  filter(Series == "AAAVis") %>%
+  ggplot(aes(x = date, y = Actual, colour = "Actual", size = 'Actual')) +
+  geom_ribbon(aes(x = date, ymax = ETS.upper.unrec, ymin = ETS.lower.unrec), fill = "gray83", colour = "gray83", alpha = .2, size = 0.5) +
+  geom_ribbon(aes(x = date, ymax = ETS.upper.rec, ymin = ETS.lower.rec), fill = "lightgreen", colour = "lightgreen", alpha = .2, size = 0.5)  +
+  geom_line(aes(y = ETS.rec, colour = "ETS.unrec", size = 'ETS.unrec')) +
+  geom_line(aes(y = ETS.rec, colour = "ETS.rec", size= 'ETS.rec')) +
+  geom_line() +
+  xlab("Horizon") +
+  ylab("Count") +
+  ggtitle("") +
+  scale_colour_manual("Method",
+                      breaks = c("Actual", "ETS.unrec", 'ETS.rec'),
+                      values = c("black", "gray",  "green"))+
+  scale_size_manual(breaks = c("Actual", "ETS.unrec", 'ETS.rec'),
+                    values = c( 0.8, 0.5,  0.5), guide = "none") +
+  theme_bw()
+
+p3 <- forecast.tourism.data %>%
+  filter(Series == "AAAVis") %>%
+  ggplot(aes(x = date, y = Actual, colour = "Actual", size = 'Actual')) +
+  geom_ribbon(aes(x = date, ymax = OLS.upper.unrec, ymin = OLS.lower.unrec), fill = "gray83", colour = "gray83", alpha = .2, size = 0.5) +
+  geom_ribbon(aes(x = date, ymax = OLS.upper.rec, ymin = OLS.lower.rec), fill = "pink", colour = "pink", alpha = .2, size = 0.5)  +
+  geom_line(aes(y = ETS.rec, colour = "OLS.unrec", size = 'OLS.unrec')) +
+  geom_line(aes(y = OLS.rec, colour = "OLS.rec", size = 'OLS.rec')) +
+  geom_line() +
+  xlab("Horizon") +
+  ylab("Count") +
+  ggtitle("") +
+  scale_colour_manual("Method",
+                      breaks = c("Actual", "OLS.unrec", 'OLS.rec'),
+                      values = c("black", "gray",  "red"))+
+  scale_size_manual(breaks = c("Actual", "OLS.unrec", 'OLS.rec'),
+                    values = c( 0.8, 0.5,  0.5), guide = "none") +
+  theme_bw()
+
+cowplot::plot_grid(p1, p2, p3)
+
+
